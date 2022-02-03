@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <!-- Title  -->
+    <title>Factoria Dapp</title>
+    <meta name="description" content="" />
+    <meta name="keywords" content="" />
+    <link rel="shortcut icon" href="favicon.png" type="image/x-icon" />
+    <link rel="stylesheet" href="https://unpkg.com/purecss@2.0.6/build/pure-min.css" integrity="sha384-Uu6IeWbM+gzNVXJcM9XV3SohHtmWE+3VGi496jvgX1jyvDTXfdK+rfZc8C1Aehk5" crossorigin="anonymous">
+    <style>
+        .content{
+            padding: 0 20px 20px;
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 768px;
+        }
+
+        .minting-body{
+            display: none;
+        }
+
+        .minting-body.is-active{
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="content">
+        <div class="pure-g">
+            <div class="pure-u-1">
+                <h2>A very simple minting Dapp for Factoria.</h2>
+                <div class="button-holder">
+                    <div class="note">
+                        <span>&#x2691;</span> Please connect your MetaMask wallet to mint your free NFTs.
+                    </div>
+                </div>
+            </div>
+            <div class="pure-u-1">
+                <div style="border:1px solid rgba(0,0,0,0.5);padding:4px;margin-top:25px;">
+                    <h4 style="border-bottom:1px solid rgba(0,0,0,0.5)">Minting form will load here</h4>
+                    <div id="js-mint-body" class="minting-body">
+                        This content will be replaced with minting content
+                    </div>
+                    <div class="console" style="border-top:1px solid rgba(0,0,0,0.5); margin-top: 20px;">
+                        This will be replaced by minted NFT links
+                    </div>
+                    <!-- .is-loading class is added to .loader 
+                          if you decide to display a spinning/loading icon when NFTs are being minted
+                    -->
+                    <div class="loader"></div>
+                </div>
+            </div>
+            <div class="pure-u-1">
+                <div class="alert" style="border:1px solid rgba(0,0,0,0.5);padding:4px;margin-top:25px;">
+                    <h4 style="border-bottom:1px solid rgba(0,0,0,0.5)">Errors will display here.</h4>
+                    <div class="alert-content">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.7.0-rc.0/web3.min.js"></script>
+    <script src="https://unpkg.com/f0js@0.0.12/dist/f0.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.7.7/handlebars.min.js"></script>
+    <!-- 
+        HandleBar Templates 
+    -->
+    <!-- connect wallet button template -->
+    <script id="connect-button" type="text/x-handlebars-template">
+        <a class='pure-button pure-button-primary js-connect' href='#'>Connect MetaMask To Mint <span class='loading'></span></a>
+    </script>
+    <!-- load minting form/content button template -->
+    <script id="load-button" type="text/x-handlebars-template">
+        <a class='pure-button pure-button-primary js-load' href='#mint' data-address="{{address}}" data-key="{{key}}" data-max="{{limit}}">Click to load minting form</a>
+    </script>
+    <!-- minting template -->
+    <script id="minting-content" type="text/x-handlebars-template">
+        <div class='pure-g'>
+            <div class="pure-u-1-2">
+                <img src='{{image}}' class='pure-img'>
+            </div>
+            <div class='pure-u-1-2'>
+                <h5>Connected account</h5>
+                <span>{{account}}</span>
+
+                <h5>Maximum tokens allowed</h5>
+                <span>{{max}}</span>
+
+                <h5>Remaining token supply</h5>
+                <span>{{available}}</span>
+            </div>
+        </div>
+        <div class='pure-form' style='margin-top:20px;'>
+            <label for='mintinput' class='label sub-heading'>Number of NFTs to mint</label>
+            <div class='form-control'>
+                <input class='input js-input' type='number' id='mintinput' min='1' max='{{max}}' placeholder='{{max}}'>
+                <button id='mint' class='pure-button pure-button-primary'>Mint</button>
+            </div>
+        </div>
+        <div class='loader'><span class='loading'></span></div>
+        <div class='console'>
+
+            
+
+    </script>
+    <!-- minted template -->
+    <script id="minted-template" type="text/x-handlebars-template">
+        <div class='minted'>
+            <h5>Your minted token links</h5>
+            <div class='pure-g'>
+              <div class='pure-u-1-2'><h4>OpenSea</h4></div>
+              <div class='pure-u-1-2'><h4>Rarible</h4></div>
+            </div>
+            {{#each items}}
+                <div class='pure-g'>
+                  <div class="pure-u-1-2"><a class='token' target="_blank" href="{{opensea}}">token #{{tokenId}}</a></div>
+                  <div class="pure-u-1-2"><a class='token' target="_blank" href="{{rarible}}">token #{{tokenId}}</a></div>
+                </div>
+            {{/each}}
+            <p style="font-size:14px; border-top:1px solid rgba(255,255,255,0.2);padding-top:4px;">If your links return 404 error, please allow some time for marketplaces to pick up the transaction.</p>
+        </div>
+    </div>
+    </script>
+    <script>
+    const mySite = function() {
+        'use strict';
+
+        const f0 = new F0();
+        const web3 = new Web3(window.ethereum);
+        // contract address
+        const address = '0x074f0C3212d361EAEA619AF333578ab73F2af00B';
+
+        // minting button container
+        const buttonContainer = document.querySelector('.button-holder');
+
+        // alert consts to display alerts to user
+        const alertContainer = document.querySelector('.alert');
+        const alertContent = alertContainer.querySelector('.alert-content');
+
+        console.log(alertContainer);
+
+
+
+
+        // mint nft button
+        const mintNft = (key, limit, remaining) => {
+            // minting button
+            const mintButton = document.getElementById('mint');
+            // where minted nft links will show
+            const mintConsole = document.querySelector(".console");
+            // minted links template
+            const mintedTemplate = Handlebars.compile(document.getElementById("minted-template").innerHTML);
+
+            // Minting eventListener
+            mintButton.addEventListener('click', async () => {
+                // get the value of the input field
+                let count = parseInt(document.querySelector('.js-input').value);
+
+                // Simple error displays for better ux 
+                // preventing any sort of transaction to initiate if basic conditions are not met
+
+                // check if user is trying to mint 0 :/
+                if (count === 0) {
+                    alertContent.innerHTML = '<h3>Minting Error!</h3><p>Total NFTs to mint should be greater than 0.</p>';
+                    popError();
+                    // check if user is trying to mint more than allowed
+                } else if (count > limit) {
+                    alertContent.innerHTML = `<h3>Minting Error!</h3><p>Total NFTs to mint should be less than or equal to your maximum allowed limit of ${limit}.</p>`;
+                    popError();
+                    // Check if the input value is a valid number    
+                } else if (count === '' || isNaN(count)) {
+                    alertContent.innerHTML = `<h3>Minting Error!</h3><p>Please enter a number greater that 0 and less than or equal to your allowed limit of ${limit}.</p>`;
+                    popError();
+                    // Check if user is trying to mint more than remaining supply
+                } else if (count > remaining) {
+                    alertContent.innerHTML = `<h3>Minting Error!</h3><p>Please enter a number less than or equal to remaining supply of ${remaining} tokens.</p>`;
+                    popError();
+                    // good to mint    
+                } else {
+                    try {
+                        document.querySelector('.loader').classList.add('is-loading');
+                        let tokens = await f0.mint(key, count);
+                        console.log(count);
+
+                        // display minted nft links
+                        mintConsole.innerHTML = mintedTemplate({
+                            items: tokens.map((token) => {
+                                return {
+                                    opensea: token.links.opensea,
+                                    rarible: token.links.rarible,
+                                    tokenId: token.tokenId
+                                }
+                            })
+                        });
+
+                        document.querySelector('.loader').classList.remove('is-loading');
+                    } catch (e) {
+                        console.log(e);
+                        // in this instance 4001 means the user rejected the transaction
+                        if (e.code == 4001) {
+                            alertContent.innerHTML = '<h3>Error!</h3><p>It looks like you rejected the transaction signature. Please try again.</p>';
+                            popError();
+                        } else {
+                            alertContent.innerHTML = '<h3>Minting Error!</h3><p>It looks like there was an error trying to mint your NFT. If you have already minted your allowed limit, you cannot mint any more.</p><p> Otherwise, please refresh the page and try again.</p>';
+                            popError();
+                        }
+                        document.querySelector('.loader').classList.remove('is-loading');
+                    }
+                }
+
+            });
+
+
+        }
+
+        // loadButton eventHandler
+        const loadTrigger = () => {
+            let loadButton = document.querySelector('.js-load');
+
+            loadButton.addEventListener('click', (e) => {
+                document.getElementById('js-mint-body').classList.add('is-active');
+            });
+
+        };
+
+
+        // populate div with minting form content
+        const mintContent = async () => {
+            const mintTemplate = Handlebars.compile(document.querySelector("#minting-content").innerHTML);
+
+            // get the instance of button that was generated using mintKeySetup();
+            let loadButton = document.querySelector('.js-load');
+
+            // confirm if load button was generated with mintKeySetup() and exists in the dom
+            // if present the minting form/content should be generated
+
+            if (loadButton) {
+                const key = loadButton.dataset.key;
+                const address = loadButton.dataset.address;
+                const limit = loadButton.dataset.max;
+
+                let placeholder = await f0.placeholder();
+                const nextId = await f0.nextId()
+                const config = await f0.config()
+
+                // I like to display remaining supply rather than total supply
+                let remaining = config.converted.supply - (nextId - 1);
+
+                // handlebar minting template variables
+                document.getElementById("js-mint-body").innerHTML = mintTemplate({
+                    image: placeholder.converted.image,
+                    max: limit,
+                    available: remaining,
+                    account: f0.account,
+                    key: key,
+                })
+
+
+                // load trigger eventhandler
+                loadTrigger();
+
+                // main minting button
+                mintNft(key, limit, remaining);
+
+
+            } else {
+                // display install wallet alert
+                alertContent.innerHTML = '<h3>Error!</h3><p>Something went wrong. Please refresh the page and try again.</p>';
+                popError();
+            }
+
+        }
+
+
+        // minting key setup for F0 invite
+        // Note this sets the invite to whichever invite for wallet allows more mints
+        // your use case may differ
+        const mintKeySetup = async () => {
+            const TriggerButtonTemplate = Handlebars.compile(document.getElementById("load-button").innerHTML);
+            try {
+                // get invites
+                const invites = await f0.myInvites();
+                // empty array, we will push key and invite limit to this array
+                let keyLimits = [];
+
+                // check if at least 1 invite key exists for wallet
+                if (Object.keys(invites).length !== 0) {
+                    // map and push to array
+                    Object.keys(invites).map((key, index) => {
+                        keyLimits.push({
+                            'key': invites[key].key,
+                            'limit': invites[key].condition.converted.limit
+                        })
+                    });
+                    // get the invite key that allows most mints
+                    let keyLimit = keyLimits.reduce(function(prev, current) {
+                        return (prev.limit > current.limit) ? prev : current
+                    });
+
+                    // button template
+                    buttonContainer.innerHTML = TriggerButtonTemplate({
+                        address: address,
+                        key: keyLimit.key,
+                        limit: keyLimit.limit,
+                    })
+
+                    // display minting content button
+                    mintContent();
+                } else {
+
+                    alertContent.innerHTML = '<h3>Oops!</h3><p>It looks like your connected wallet was not found on any Allow-Lists. Please come back on 27th January at 10PM GMT when public mint goes live.</p><p>Thank you for your patience!</p>';
+                    popError();
+                }
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // initialize F0
+        const initF0 = async () => {
+
+            let connectBtn = document.querySelector('.js-connect.is-loading');
+            try {
+                await f0.init({
+                    web3: web3,
+                    contract: address,
+                    network: 'rinkeby',
+                });
+
+                // check if we can get a connected wallet
+                if (f0.account) {
+                    // log connect wallet address
+                    console.log(f0.account);
+                    mintKeySetup();
+
+                } else {
+                    // if no wallet is connected
+                    alertContent.innerHTML = '<h3>Error!</h3><p>Please connect a wallet to mint your free NFT.</p>';
+                    popError();
+                }
+                // remove the loading class from btn
+                connectBtn.classList.remove('is-loading');
+
+
+            } catch (e) {
+                // 4001 usually(maybe always) implies the user rejected the request
+                // in this case it was the request to connect wallet
+                if (e.code == 4001) {
+                    alertContent.innerHTML = '<h3>Error!</h3><p>It looks like you rejected the request to connect your wallet. Please connect your wallet to mint your NFT.</p>';
+                    popError();
+                    // if the error is something else below will show in alert pop up
+                } else {
+                    alertContent.innerHTML = '<h3>Error!</h3><p>Something went wrong. Please make sure you are connected to Ethereum Mainnet. If issue persists, please refresh the page and try again.</p>';
+                    popError();
+                }
+                // log the error
+                console.log(e);
+                // remove loading class from btn
+                connectBtn.classList.remove('is-loading');
+            }
+        }
+
+
+        // connect button event handler
+        // fires once button template is loaded
+        const connect = () => {
+            let connectBtn = document.querySelector('.js-connect');
+            connectBtn.addEventListener('click', () => {
+                // on click adds a loading class
+                connectBtn.classList.add('is-loading');
+                // initiate F0
+                initF0();
+            })
+        }
+
+
+        // display connect wallet button
+        const connectButton = () => {
+            const connectButtonTemplate = Handlebars.compile(document.getElementById('connect-button').innerHTML);
+
+            buttonContainer.innerHTML = connectButtonTemplate();
+            // connect button event handler
+            connect();
+        };
+
+
+        // display alert if no metamask is installed
+        const noMetaMask = () => {
+            console.log('MetaMask not found');
+            // display install wallet alert
+            alertContent.innerHTML = '<h3>Wallet Error!</h3><p>Website requires <a href="https://metamask.io/" target="_blank">MetaMask</a> wallet to mint. Please install <a href="https://metamask.io/" target="_blank">MetaMask</a> and refresh this page.</p>';
+            popError();
+        }
+
+
+        // check if metamask is installed
+        // returns Boolean
+        const isMetaMask = () => {
+            //Have to check the ethereum binding on the window object to see if it's installed
+            const { ethereum } = window;
+            return Boolean(ethereum && ethereum.isMetaMask);
+        };
+
+
+
+        // open / close error alerts
+        const popError = () => {
+            // displays alert by adding active class
+            alertContainer.classList.add('is-active');
+
+
+            // event handler to close alert
+            // In most used cases an error container block should have a close button
+            // Removes active class from alert container and empties the div
+
+            // alertContainer.querySelector('.alert__close').addEventListener('click', () => {
+            //     alertContainer.classList.remove('alert--active');
+            //     alertContainer.querySelector('.alert__content').innerHTML = '';
+            // });
+        }
+
+        return {
+            //document ready
+            initReady: () => {
+                // functions that run after document is loaded
+                if (isMetaMask()) {
+                    connectButton();
+                } else {
+                    noMetaMask();
+                }
+
+            },
+
+
+            // window loaded
+            initLoaded: () => {
+                // functions that run after window is loaded
+            }
+        }
+
+    }();
+
+
+    // Document Ready
+    document.addEventListener("DOMContentLoaded", (event) => {
+        mySite.initReady();
+    });
+    // Window Loaded
+    window.addEventListener('load', (event) => {
+        mySite.initLoaded();
+    });
+    </script>
+</body>
+
+</html>
